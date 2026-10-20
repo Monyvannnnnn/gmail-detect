@@ -13,6 +13,27 @@ export default async function handler(req: any, res: any) {
     return res.status(400).json({ error: 'Email is required' });
   }
 
+  const BLOCKED_DOMAINS = [
+    'tsdsolution.com',
+    'newwavetech.ai',
+    'bikay.asia',
+    'bizsolution.com.kh',
+    'mangobyte.com.kh',
+    'dotfusion.com',
+    'closo.asia',
+    'blue.com.kh',
+    'kdigitalsolutions.com',
+    'odoo.com',
+    'cuscen.com',
+  ];
+
+  const domain = String(email).split('@')[1]?.toLowerCase().trim();
+  if (domain && BLOCKED_DOMAINS.some((b) => domain === b || domain.endsWith('.' + b))) {
+    return res.status(400).json({
+      error: `Domain @${domain} is not allowed by organization policy.`,
+    });
+  }
+
   const apiKey = process.env.ABSTRACT_API_KEY || '20c168fc6ddf490fb4b2a4f3d29e5153';
   const url = `https://emailreputation.abstractapi.com/v1/?api_key=${apiKey}&email=${encodeURIComponent(email)}`;
 

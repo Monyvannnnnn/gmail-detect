@@ -157,7 +157,12 @@ export const AuthCard: React.FC<AuthCardProps> = ({ onSuccess, registeredUsers }
     e.preventDefault();
     setErrorMessage(null);
 
-    // 1. Strictly block free consumer emails (Gmail, Yahoo, etc.)
+    // 1. Strictly block free consumer emails and explicitly blocked domains
+    if (domainValidation.isBlockedDomain) {
+      setErrorMessage(`Domain @${domainValidation.domain} is not allowed by organization policy.`);
+      return;
+    }
+
     if (domainValidation.isFreeDomain) {
       setErrorMessage(`Free email provider (@${domainValidation.domain}) is not allowed. Only company email is accepted.`);
       return;
@@ -423,7 +428,11 @@ export const AuthCard: React.FC<AuthCardProps> = ({ onSuccess, registeredUsers }
                     <div className="flex items-center gap-2">
                       <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
                       <p className="font-semibold text-red-200 text-xs">
-                        Free @{domainValidation.domain} is not allowed!
+                        {domainValidation.isBlockedDomain
+                          ? `@${domainValidation.domain} is not allowed!`
+                          : domainValidation.domain.toLowerCase().includes('gmail')
+                          ? 'Free @gmail.com is not allowed!'
+                          : `Free @${domainValidation.domain} is not allowed!`}
                       </p>
                     </div>
                     <span className="text-[10px] bg-red-500/30 text-red-200 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider border border-red-400/40">

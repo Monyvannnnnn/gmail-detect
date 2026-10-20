@@ -47,6 +47,30 @@ async function verifyWithAbstractApi(email: string, mailServer: string) {
   };
 }
 
+const BLOCKED_DOMAINS = new Set([
+  'tsdsolution.com',
+  'newwavetech.ai',
+  'bikay.asia',
+  'bizsolution.com.kh',
+  'mangobyte.com.kh',
+  'dotfusion.com',
+  'closo.asia',
+  'blue.com.kh',
+  'kdigitalsolutions.com',
+  'odoo.com',
+  'cuscen.com',
+]);
+
+function isBlocked(domain: string): boolean {
+  if (!domain) return false;
+  const d = domain.toLowerCase().trim();
+  if (BLOCKED_DOMAINS.has(d)) return true;
+  for (const b of BLOCKED_DOMAINS) {
+    if (d.endsWith('.' + b)) return true;
+  }
+  return false;
+}
+
 export default async function handler(req: any, res: any) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -67,7 +91,16 @@ export default async function handler(req: any, res: any) {
     return res.status(200).json({ valid: false, reason: 'Invalid email domain' });
   }
 
-  // 1. Immediately reject fake/random usernames
+  // 1. Immediately reject explicitly blocked domains
+  if (isBlocked(domain)) {
+    return res.status(200).json({
+      valid: false,
+      message: `@${domain} is not allowed!`,
+      reason: `@${domain} is not allowed by organization policy.`,
+    });
+  }
+
+  // 2. Immediately reject fake/random usernames
   if (isLikelyFake(localPart)) {
     return res.status(200).json({
       valid: false,

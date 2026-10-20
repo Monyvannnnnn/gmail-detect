@@ -42,9 +42,35 @@ export const FREE_EMAIL_DOMAINS = new Set([
   'web.de',
 ]);
 
+// Explicitly blocked domains by organizational policy
+export const BLOCKED_DOMAINS = new Set([
+  'tsdsolution.com',
+  'newwavetech.ai',
+  'bikay.asia',
+  'bizsolution.com.kh',
+  'mangobyte.com.kh',
+  'dotfusion.com',
+  'closo.asia',
+  'blue.com.kh',
+  'kdigitalsolutions.com',
+  'odoo.com',
+  'cuscen.com',
+]);
+
+export function isBlockedDomain(domain: string): boolean {
+  if (!domain) return false;
+  const d = domain.toLowerCase().trim();
+  if (BLOCKED_DOMAINS.has(d)) return true;
+  for (const blocked of BLOCKED_DOMAINS) {
+    if (d.endsWith('.' + blocked)) return true;
+  }
+  return false;
+}
+
 export interface DomainValidationResult {
   isValid: boolean;
   isFreeDomain: boolean;
+  isBlockedDomain?: boolean;
   domain: string;
   companyName?: string;
   error?: string;
@@ -145,6 +171,18 @@ export function validateCorporateEmail(email: string): DomainValidationResult {
       isFakeUser: true,
       domain,
       error: 'Invalid: Mailbox does not exist on this server (Fake user).',
+    };
+  }
+
+  // Check if domain is in the list of explicitly blocked domains
+  if (isBlockedDomain(domain)) {
+    return {
+      isValid: false,
+      isFreeDomain: true,
+      isBlockedDomain: true,
+      domain,
+      error: `@${domain} is not allowed!`,
+      suggestedAction: 'Please use an authorized corporate email domain.',
     };
   }
 

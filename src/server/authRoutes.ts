@@ -25,6 +25,27 @@ router.post('/signup', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Email is required' });
   }
 
+  const BLOCKED_DOMAINS = [
+    'tsdsolution.com',
+    'newwavetech.ai',
+    'bikay.asia',
+    'bizsolution.com.kh',
+    'mangobyte.com.kh',
+    'dotfusion.com',
+    'closo.asia',
+    'blue.com.kh',
+    'kdigitalsolutions.com',
+    'odoo.com',
+    'cuscen.com',
+  ];
+
+  const domain = String(email).split('@')[1]?.toLowerCase().trim();
+  if (domain && BLOCKED_DOMAINS.some((b) => domain === b || domain.endsWith('.' + b))) {
+    return res.status(400).json({
+      error: `Domain @${domain} is not allowed by organization policy.`,
+    });
+  }
+
   try {
     const data = await verifyEmailWithAbstract(email);
 
