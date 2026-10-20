@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Building2, ShieldCheck, Users, Key, LogOut, CheckCircle, ExternalLink, Mail, Copy, Check } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Building2, ShieldCheck, Users, Key, LogOut, CheckCircle, CheckCircle2, ExternalLink, Mail, Copy, Check, X } from 'lucide-react';
 import { UserAccount } from './AuthCard';
 
 interface EnterpriseDashboardProps {
@@ -9,6 +9,12 @@ interface EnterpriseDashboardProps {
 
 export const EnterpriseDashboard: React.FC<EnterpriseDashboardProps> = ({ user, onLogout }) => {
   const [copied, setCopied] = useState(false);
+  const [showToast, setShowToast] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShowToast(false), 5000);
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleCopyEmail = () => {
     navigator.clipboard.writeText(user.email);
@@ -24,7 +30,31 @@ export const EnterpriseDashboard: React.FC<EnterpriseDashboardProps> = ({ user, 
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-['Plus_Jakarta_Sans']">
+    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-['Plus_Jakarta_Sans'] relative">
+      {/* Success Notification Toast */}
+      {showToast && (
+        <div className="fixed top-6 right-6 z-50 flex items-center gap-3 bg-slate-900/95 text-white px-4.5 py-3 rounded-2xl shadow-2xl border border-emerald-500/40 backdrop-blur-md transition-all">
+          <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/30">
+            <CheckCircle2 className="w-4.5 h-4.5" />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-white flex items-center gap-1.5">
+              Authentication Successful
+            </p>
+            <p className="text-[11px] text-slate-300">
+              Welcome, <span className="text-white font-medium">{user.name}</span>! Session established.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowToast(false)}
+            className="text-slate-400 hover:text-white p-1 rounded-md transition-colors ml-2 cursor-pointer"
+            aria-label="Close notification"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Top Corporate Nav */}
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-20">
         <div className="flex items-center gap-3">

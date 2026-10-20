@@ -1,4 +1,4 @@
-import React, { useState, useId } from 'react';
+import React, { useState, useId, useEffect } from 'react';
 import { User, Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, Building2, ShieldCheck, ArrowRight } from 'lucide-react';
 import { validateCorporateEmail, calculatePasswordStrength, DomainValidationResult } from '../utils/domainValidator';
 
@@ -26,6 +26,28 @@ export const AuthCard: React.FC<AuthCardProps> = ({ onSuccess, registeredUsers }
   // Form error & validation state
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Success state on signup or signin
+  const [successData, setSuccessData] = useState<{
+    mode: 'signup' | 'signin';
+    user: UserAccount;
+  } | null>(null);
+  const [countdown, setCountdown] = useState(3);
+
+  useEffect(() => {
+    if (!successData) return;
+
+    if (countdown <= 0) {
+      onSuccess(successData.user);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setCountdown((prev) => prev - 1);
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [successData, countdown, onSuccess]);
 
   // Unique IDs for accessibility
   const nameInputId = useId();
@@ -83,8 +105,9 @@ export const AuthCard: React.FC<AuthCardProps> = ({ onSuccess, registeredUsers }
           domain: val.domain,
           createdAt: new Date().toISOString(),
         };
-        onSuccess(newUser);
-      }, 600);
+        setCountdown(3);
+        setSuccessData({ mode: 'signup', user: newUser });
+      }, 500);
     } else {
       // Sign in mode
       if (!password) {
@@ -103,10 +126,78 @@ export const AuthCard: React.FC<AuthCardProps> = ({ onSuccess, registeredUsers }
           domain: val.domain,
           createdAt: new Date().toISOString(),
         };
-        onSuccess(userToLogin);
+        setCountdown(3);
+        setSuccessData({ mode: 'signin', user: userToLogin });
       }, 500);
     }
   };
+
+  if (successData) {
+    return (
+      <div className="w-full h-full bg-[#0B63F6] text-white flex flex-col justify-center items-center p-7 sm:p-10 lg:p-12 relative overflow-hidden text-center min-h-[580px] lg:min-h-[640px]">
+        {/* Subtle decorative radial glow */}
+        <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-400/20 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-72 h-72 bg-blue-700/40 rounded-full blur-2xl pointer-events-none" />
+
+        <div className="relative z-10 w-full max-w-md mx-auto flex flex-col items-center">
+          {/* Animated Success Badge */}
+          <div className="relative mb-6">
+            <div className="w-20 h-20 rounded-full bg-emerald-400/20 border-2 border-emerald-400/40 flex items-center justify-center animate-pulse">
+              <div className="w-14 h-14 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-500/30">
+                <CheckCircle2 className="w-8 h-8" />
+              </div>
+            </div>
+          </div>
+
+          {/* Heading */}
+          <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight mb-2">
+            {successData.mode === 'signup' ? 'Account Created!' : 'Signed In Successfully!'}
+          </h2>
+          <p className="text-blue-100/90 text-sm mb-6 max-w-sm">
+            {successData.mode === 'signup'
+              ? `Welcome aboard, ${successData.user.name}! Your enterprise account has been created.`
+              : `Welcome back, ${successData.user.name}! Authenticated with your organization domain.`}
+          </p>
+
+          {/* Verification Details Box */}
+          <div className="w-full bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-4.5 mb-6 text-left space-y-2.5">
+            <div className="flex items-center justify-between text-xs border-b border-white/15 pb-2">
+              <span className="text-blue-200">Email:</span>
+              <span className="font-semibold text-white font-mono">{successData.user.email}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs border-b border-white/15 pb-2">
+              <span className="text-blue-200">Organization:</span>
+              <span className="font-semibold text-white">{successData.user.companyName}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-blue-200">Domain Status:</span>
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-300 bg-emerald-500/20 px-2.5 py-0.5 rounded-full border border-emerald-400/30">
+                <ShieldCheck className="w-3 h-3" />
+                Verified Google Workspace (@{successData.user.domain})
+              </span>
+            </div>
+          </div>
+
+          {/* Action Button & Countdown */}
+          <div className="w-full space-y-3">
+            <button
+              type="button"
+              onClick={() => onSuccess(successData.user)}
+              className="w-full h-12 rounded-full bg-[#FFA000] hover:bg-[#FFB300] active:scale-[0.98] font-bold text-sm text-slate-950 shadow-lg shadow-amber-900/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <span>Enter Workspace Now</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center justify-center gap-2 text-xs text-blue-100/80">
+              <div className="w-3.5 h-3.5 border-2 border-white/60 border-t-transparent rounded-full animate-spin" />
+              <span>Redirecting to dashboard in {countdown}s...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full h-full bg-[#0B63F6] text-white flex flex-col justify-between p-7 sm:p-10 lg:p-12 relative overflow-hidden">
