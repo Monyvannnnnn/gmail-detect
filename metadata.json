@@ -1,0 +1,6 @@
+{
+  "name": "Enterprise Workspace Portal",
+  "description": "Corporate authentication portal requiring company Google Workspace domain for sign up.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
