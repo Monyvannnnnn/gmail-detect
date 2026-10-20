@@ -1,6 +1,14 @@
 import React, { useState, useId, useEffect } from 'react';
-import { User, Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, Building2, ShieldCheck, ArrowRight } from 'lucide-react';
-import { validateCorporateEmail, calculatePasswordStrength, DomainValidationResult } from '../utils/domainValidator';
+import { User, Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, Building2, ShieldCheck, ArrowRight, Loader2, Sparkles, ExternalLink } from 'lucide-react';
+import {
+  validateCorporateEmail,
+  calculatePasswordStrength,
+  DomainValidationResult,
+  checkDomainMxLive,
+  MxCheckResult,
+  detectDomainTypo,
+  detectLocalPartTypo,
+} from '../utils/domainValidator';
 
 export interface UserAccount {
   name: string;
@@ -26,6 +34,19 @@ export const AuthCard: React.FC<AuthCardProps> = ({ onSuccess, registeredUsers }
   // Form error & validation state
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Live DNS MX Checking state
+  const [isCheckingMx, setIsCheckingMx] = useState(false);
+  const [mxResult, setMxResult] = useState<MxCheckResult | null>(null);
+
+  // Live Mailbox Ping State (SMTP / Direct Mailbox Verification)
+  const [isCheckingMailbox, setIsCheckingMailbox] = useState(false);
+  const [mailboxResult, setMailboxResult] = useState<{
+    valid: boolean;
+    message?: string;
+    reason?: string;
+    mailServer?: string;
+  } | null>(null);
 
   // Success state on signup or signin
   const [successData, setSuccessData] = useState<{
@@ -54,29 +75,120 @@ export const AuthCard: React.FC<AuthCardProps> = ({ onSuccess, registeredUsers }
   const emailInputId = useId();
   const passwordInputId = useId();
 
-  // Real-time domain validation
+  // Real-time domain validation (synchronous format & free domain check)
   const domainValidation: DomainValidationResult = validateCorporateEmail(email);
   const isEmailDirty = email.length > 0;
   const hasAtSymbol = email.includes('@');
 
+  // Debounced live DNS MX checking
+  useEffect(() => {
+    if (!email || !email.includes('@')) {
+      setMxResult(null);
+      setIsCheckingMx(false);
+      return;
+    }
+
+    const val = validateCorporateEmail(email);
+    if (!val.isValid || val.isFreeDomain) {
+      setMxResult(null);
+      setIsCheckingMx(false);
+      return;
+    }
+
+    setIsCheckingMx(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await checkDomainMxLive(val.domain, email);
+        setMxResult(res);
+      } catch {
+        setMxResult(null);
+      } finally {
+        setIsCheckingMx(false);
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [email]);
+
+  // Debounced live Mailbox Ping checking
+  useEffect(() => {
+    if (!email || !email.includes('@')) {
+      setMailboxResult(null);
+      setIsCheckingMailbox(false);
+      return;
+    }
+
+    const [, domainPart] = email.split('@');
+    if (!domainPart || !domainPart.includes('.') || domainValidation.isFreeDomain || domainValidation.isFakeUser) {
+      setMailboxResult(null);
+      setIsCheckingMailbox(false);
+      return;
+    }
+
+    setIsCheckingMailbox(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/check-mailbox?email=${encodeURIComponent(email.trim().toLowerCase())}`);
+        if (res.ok) {
+          const data = await res.json();
+          setMailboxResult(data);
+        } else {
+          setMailboxResult(null);
+        }
+      } catch {
+        setMailboxResult(null);
+      } finally {
+        setIsCheckingMailbox(false);
+      }
+    }, 450);
+
+    return () => clearTimeout(timer);
+  }, [email]);
+
+  const localPartTypo = isEmailDirty && hasAtSymbol ? detectLocalPartTypo(email) : null;
+  const isDomainInvalid = Boolean(
+    isEmailDirty && hasAtSymbol && !domainValidation.isFreeDomain && mxResult && !mxResult.hasMx && mxResult.status === 'NOT_FOUND'
+  );
+
   // Password strength
   const strength = calculatePasswordStrength(password);
-
-  const handleTestDomain = (testEmail: string) => {
-    setEmail(testEmail);
-    setErrorMessage(null);
-  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
-    // Validate email
-    const val = validateCorporateEmail(email);
-    if (!val.isValid) {
-      setErrorMessage(val.error || 'Please enter a valid corporate email address.');
+    // 1. Strictly block free consumer emails (Gmail, Yahoo, etc.)
+    if (domainValidation.isFreeDomain) {
+      setErrorMessage(`Free email provider (@${domainValidation.domain}) is not allowed. Only company email is accepted.`);
       return;
     }
+
+    // 2. Strictly block fake / random usernames
+    if (domainValidation.isFakeUser) {
+      setErrorMessage('Invalid: Mailbox does not exist on this server (Fake user).');
+      return;
+    }
+
+    // 3. Reject if mailbox check confirmed invalid / fake user
+    if (mailboxResult && !mailboxResult.valid) {
+      setErrorMessage(mailboxResult.reason || mailboxResult.message || 'Invalid corporate email: Mailbox does not exist on this server.');
+      return;
+    }
+
+    // 3. Validate corporate email format and domain
+    const val = validateCorporateEmail(email);
+    if (!val.isValid) {
+      setErrorMessage(val.error || 'Please enter a valid company email address.');
+      return;
+    }
+
+    if (mxResult && !mxResult.hasMx && mxResult.status === 'NOT_FOUND') {
+      setErrorMessage(`Domain @${val.domain || email.split('@')[1]} does not exist or has no active mail exchange (MX) servers.`);
+      return;
+    }
+
+    const domainName = val.domain || (email.includes('@') ? email.split('@')[1] : '');
+    const companyDisplayName = val.companyName || (domainName ? domainName.split('.')[0].toUpperCase() : 'Workspace');
 
     if (mode === 'signup') {
       if (!name.trim()) {
@@ -101,8 +213,8 @@ export const AuthCard: React.FC<AuthCardProps> = ({ onSuccess, registeredUsers }
         const newUser: UserAccount = {
           name: name.trim(),
           email: email.trim().toLowerCase(),
-          companyName: val.companyName || 'Corporate',
-          domain: val.domain,
+          companyName: companyDisplayName,
+          domain: domainName,
           createdAt: new Date().toISOString(),
         };
         setCountdown(3);
@@ -122,8 +234,8 @@ export const AuthCard: React.FC<AuthCardProps> = ({ onSuccess, registeredUsers }
         const userToLogin: UserAccount = found || {
           name: name || 'Enterprise Member',
           email: email.trim().toLowerCase(),
-          companyName: val.companyName || 'Corporate Workspace',
-          domain: val.domain,
+          companyName: companyDisplayName,
+          domain: domainName,
           createdAt: new Date().toISOString(),
         };
         setCountdown(3);
@@ -267,50 +379,117 @@ export const AuthCard: React.FC<AuthCardProps> = ({ onSuccess, registeredUsers }
                     setEmail(e.target.value);
                     if (errorMessage) setErrorMessage(null);
                   }}
-                  placeholder="Your e-mail"
+                  placeholder="Your corporate e-mail"
                   autoComplete="email"
-                  className={`w-full h-13 pl-13 pr-5 rounded-full bg-white text-slate-800 placeholder-[#9DB9E8] font-normal text-sm focus:outline-none focus:ring-4 shadow-sm transition-all ${
-                    isEmailDirty && hasAtSymbol && domainValidation.isFreeDomain
+                  className={`w-full h-13 pl-13 pr-11 rounded-full bg-white text-slate-800 placeholder-[#9DB9E8] font-normal text-sm focus:outline-none focus:ring-4 shadow-sm transition-all ${
+                    isEmailDirty && hasAtSymbol && (domainValidation.isFreeDomain || domainValidation.isFakeUser)
+                      ? 'focus:ring-rose-400 border-2 border-rose-400'
+                      : !domainValidation.isFreeDomain && !domainValidation.isFakeUser && mailboxResult?.valid
+                      ? 'focus:ring-emerald-400 border-2 border-emerald-400'
+                      : !domainValidation.isFreeDomain && ((mailboxResult && !mailboxResult.valid) || isDomainInvalid)
                       ? 'focus:ring-rose-400 border-2 border-rose-400'
                       : isEmailDirty && domainValidation.isValid
-                      ? 'focus:ring-emerald-400 border-2 border-emerald-400'
+                      ? 'focus:ring-blue-400 border-2 border-blue-400'
                       : 'focus:ring-blue-300/40 border-2 border-transparent'
                   }`}
                   required
                 />
+                <div className="absolute right-4 flex items-center pointer-events-none">
+                  {isCheckingMailbox || isCheckingMx ? (
+                    <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+                  ) : isEmailDirty && hasAtSymbol && (domainValidation.isFreeDomain || domainValidation.isFakeUser) ? (
+                    <AlertCircle className="w-4 h-4 text-rose-500" />
+                  ) : !domainValidation.isFreeDomain && !domainValidation.isFakeUser && mailboxResult?.valid ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                  ) : !domainValidation.isFreeDomain && ((mailboxResult && !mailboxResult.valid) || isDomainInvalid) ? (
+                    <AlertCircle className="w-4 h-4 text-rose-500" />
+                  ) : null}
+                </div>
               </div>
             </div>
 
-            {/* Real-time Domain Feedback Notification */}
+            {/* Real-time Domain, MX & Mailbox Feedback Notification */}
             {isEmailDirty && hasAtSymbol && (
-              <div className="px-2">
+              <div className="px-2 space-y-2">
+                {/* 1. Free Gmail / Consumer Domain -> NOT ALLOWED */}
                 {domainValidation.isFreeDomain ? (
-                  <div className="p-3 bg-red-950/40 border border-red-400/40 rounded-xl text-xs text-red-100 flex items-start gap-2 shadow-inner">
-                    <AlertCircle className="w-4 h-4 text-red-300 shrink-0 mt-0.5" />
-                    <div className="space-y-1">
-                      <p className="font-semibold text-red-200">
-                        {domainValidation.domain.includes('gmail')
-                          ? 'Free Gmail domain detected'
-                          : 'Public consumer domain detected'}
-                      </p>
-                      <p className="text-red-100/90 text-[11px] leading-relaxed">
-                        Registration is restricted to <strong className="underline">company Google Workspace</strong> domains. Free domains (@{domainValidation.domain}) are strictly not permitted.
+                  <div className="p-2.5 bg-red-950/80 border border-red-400/70 rounded-xl text-xs text-red-100 flex items-center justify-between shadow-md backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                      <p className="font-semibold text-red-200 text-xs">
+                        Free @{domainValidation.domain} is not allowed!
                       </p>
                     </div>
+                    <span className="text-[10px] bg-red-500/30 text-red-200 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider border border-red-400/40">
+                      Not Allowed
+                    </span>
                   </div>
-                ) : domainValidation.isValid ? (
-                  <div className="p-2.5 bg-emerald-950/40 border border-emerald-400/40 rounded-xl text-xs text-emerald-100 flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <div className="flex-1 flex items-center justify-between">
-                      <span className="font-medium">
-                        Corporate domain verified: <strong className="text-white">{domainValidation.companyName}</strong>
-                      </span>
-                      <span className="text-[10px] bg-emerald-500/20 text-emerald-200 px-2 py-0.5 rounded-full uppercase tracking-wider font-semibold">
-                        G-Suite OK
+                ) : domainValidation.isFakeUser ? (
+                  /* 2. Detected Fake User immediately */
+                  <div className="p-2.5 bg-red-950/80 border border-red-400/70 rounded-xl text-xs text-red-100 flex items-center justify-between shadow-md backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                      <p className="font-semibold text-red-200 text-xs">
+                        Invalid: Mailbox does not exist on this server (Fake user).
+                      </p>
+                    </div>
+                    <span className="text-[10px] bg-red-500/30 text-red-200 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider border border-red-400/40">
+                      Invalid
+                    </span>
+                  </div>
+                ) : isCheckingMailbox ? (
+                  /* 2. Company Email Pinging in progress */
+                  <div className="p-2.5 bg-slate-900/90 border border-blue-400/50 rounded-xl text-xs text-blue-100 flex items-center gap-2 shadow-md">
+                    <Loader2 className="w-4 h-4 text-blue-400 animate-spin shrink-0" />
+                    <span className="text-blue-100 font-medium text-xs">
+                      Verifying mailbox existence...
+                    </span>
+                  </div>
+                ) : mailboxResult ? (
+                  mailboxResult.valid ? (
+                    /* 3. Company Email -> VALID */
+                    <div className="p-2.5 bg-emerald-950/80 border border-emerald-400/70 rounded-xl text-xs text-emerald-100 flex items-center justify-between shadow-md backdrop-blur-sm animate-in fade-in duration-200">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <p className="font-semibold text-emerald-100 text-xs">
+                          Valid: Mailbox exists and is active!
+                        </p>
+                      </div>
+                      <span className="text-[10px] bg-emerald-500/30 text-emerald-200 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider border border-emerald-400/40">
+                        Valid
                       </span>
                     </div>
-                  </div>
+                  ) : (
+                    /* 4. Company Email -> INVALID */
+                    <div className="p-2.5 bg-red-950/80 border border-red-400/70 rounded-xl text-xs text-red-100 flex items-center justify-between shadow-md backdrop-blur-sm animate-in fade-in duration-200">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                        <p className="font-semibold text-red-200 text-xs">
+                          Invalid: Mailbox does not exist on this server (Fake user).
+                        </p>
+                      </div>
+                      <span className="text-[10px] bg-red-500/30 text-red-200 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider border border-red-400/40">
+                        Invalid
+                      </span>
+                    </div>
+                  )
                 ) : null}
+
+                {/* Local-part typo suggestion (e.g. saless -> sales) */}
+                {localPartTypo && !domainValidation.isFreeDomain && (
+                  <div className="px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-400/30 text-amber-200 text-[11px] flex items-center justify-between">
+                    <span>
+                      Typo hint: Did you mean <strong>{localPartTypo}@{domainValidation.domain}</strong>?
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setEmail(`${localPartTypo}@${domainValidation.domain}`)}
+                      className="text-[10px] underline hover:text-white cursor-pointer font-semibold ml-2"
+                    >
+                      Auto-fix
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -398,9 +577,13 @@ export const AuthCard: React.FC<AuthCardProps> = ({ onSuccess, registeredUsers }
                 {/* Primary: Orange 'Create account' button */}
                 <button
                   type="submit"
-                  disabled={isSubmitting || (isEmailDirty && domainValidation.isFreeDomain)}
+                  disabled={
+                    isSubmitting ||
+                    isCheckingMx ||
+                    (isEmailDirty && (domainValidation.isFreeDomain || isDomainInvalid))
+                  }
                   className={`flex-1 h-12 px-6 rounded-full font-bold text-sm text-slate-900 transition-all flex items-center justify-center gap-2 ${
-                    isEmailDirty && domainValidation.isFreeDomain
+                    isEmailDirty && (domainValidation.isFreeDomain || isDomainInvalid)
                       ? 'bg-amber-500/50 cursor-not-allowed text-slate-700'
                       : 'bg-[#FFA000] hover:bg-[#FFB300] active:scale-[0.98] shadow-lg shadow-amber-900/20 text-slate-950 cursor-pointer'
                   }`}
@@ -429,8 +612,16 @@ export const AuthCard: React.FC<AuthCardProps> = ({ onSuccess, registeredUsers }
                 {/* In Sign In mode: Primary is Sign in */}
                 <button
                   type="submit"
-                  disabled={isSubmitting}
-                  className="flex-1 h-12 px-6 rounded-full bg-[#FFA000] hover:bg-[#FFB300] active:scale-[0.98] font-bold text-sm text-slate-950 shadow-lg shadow-amber-900/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  disabled={
+                    isSubmitting ||
+                    isCheckingMx ||
+                    (isEmailDirty && (domainValidation.isFreeDomain || isDomainInvalid))
+                  }
+                  className={`flex-1 h-12 px-6 rounded-full font-bold text-sm text-slate-950 shadow-lg shadow-amber-900/20 transition-all flex items-center justify-center gap-2 ${
+                    isEmailDirty && (domainValidation.isFreeDomain || isDomainInvalid)
+                      ? 'bg-amber-500/50 cursor-not-allowed text-slate-700'
+                      : 'bg-[#FFA000] hover:bg-[#FFB300] active:scale-[0.98] cursor-pointer'
+                  }`}
                 >
                   {isSubmitting ? (
                     <div className="w-5 h-5 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
@@ -455,52 +646,6 @@ export const AuthCard: React.FC<AuthCardProps> = ({ onSuccess, registeredUsers }
           </div>
         </form>
 
-        {/* Quick Test Chips for user convenience */}
-        <div className="mt-8 pt-5 border-t border-blue-400/30">
-          <div className="text-[11px] uppercase tracking-wider text-blue-200/80 font-semibold mb-2 flex items-center justify-between">
-            <span>Quick Test Domain Scenarios:</span>
-            <span className="text-[10px] text-blue-300">Click to fill</span>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              type="button"
-              onClick={() => handleTestDomain('sarah.connor@gmail.com')}
-              className="px-2.5 py-1 rounded-full text-xs bg-rose-500/20 border border-rose-300/40 text-rose-100 hover:bg-rose-500/30 transition-colors flex items-center gap-1 cursor-pointer"
-              title="Test blocked consumer gmail domain"
-            >
-              <span className="text-rose-400 font-bold">✕</span> @gmail.com (Blocked)
-            </button>
-            <button
-              type="button"
-              onClick={() => handleTestDomain('alex.turner@yahoo.com')}
-              className="px-2.5 py-1 rounded-full text-xs bg-rose-500/20 border border-rose-300/40 text-rose-100 hover:bg-rose-500/30 transition-colors flex items-center gap-1 cursor-pointer"
-              title="Test blocked yahoo domain"
-            >
-              <span className="text-rose-400 font-bold">✕</span> @yahoo.com (Blocked)
-            </button>
-            <button
-              type="button"
-              onClick={() => handleTestDomain('jordan.lee@nexuscorp.io')}
-              className="px-2.5 py-1 rounded-full text-xs bg-emerald-500/20 border border-emerald-300/40 text-emerald-100 hover:bg-emerald-500/30 transition-colors flex items-center gap-1 cursor-pointer"
-              title="Test allowed company domain"
-            >
-              <span className="text-emerald-400 font-bold">✓</span> @nexuscorp.io (Allowed)
-            </button>
-            <button
-              type="button"
-              onClick={() => handleTestDomain('dev@stripe.com')}
-              className="px-2.5 py-1 rounded-full text-xs bg-emerald-500/20 border border-emerald-300/40 text-emerald-100 hover:bg-emerald-500/30 transition-colors flex items-center gap-1 cursor-pointer"
-              title="Test allowed corporate domain"
-            >
-              <span className="text-emerald-400 font-bold">✓</span> @stripe.com (Allowed)
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Footer reassurance */}
-      <div className="relative z-10 pt-4 text-center text-[11px] text-blue-200/70">
-        Enterprise Workspace SSO Protection &bull; Zero Free Domain Policy Enforced
       </div>
     </div>
   );

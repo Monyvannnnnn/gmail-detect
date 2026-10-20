@@ -49,6 +49,42 @@ export interface DomainValidationResult {
   companyName?: string;
   error?: string;
   suggestedAction?: string;
+  isFakeUser?: boolean;
+}
+
+/**
+ * Detects fake / test / random email user patterns
+ */
+export function isLikelyFakeUsername(localPart: string): boolean {
+  if (!localPart) return false;
+  const lp = localPart.toLowerCase().trim();
+
+  // 1. Explicit fake/test/random prefix or keywords
+  if (/^(random|fake|test|temp|dummy|sample|testing|mock|trash|nobody|asdf|qwerty|xyz|nonexistent|user\d|test\d)/.test(lp)) {
+    return true;
+  }
+
+  // 2. Contains explicit fake/random terms
+  if (/random|fakeuser|fakemail|testmail|noreal|notreal|invalid|unknown|placeholder/.test(lp)) {
+    return true;
+  }
+
+  // 3. Trailing random numbers (3 or more digits at end, e.g. randomtest99812, user12345, test998)
+  if (/\d{3,}$/.test(lp)) {
+    return true;
+  }
+
+  // 4. Pure digits or excessive numbers
+  if (/^\d+$/.test(lp) || (lp.replace(/\D/g, '').length > 4 && lp.length < 10)) {
+    return true;
+  }
+
+  // 5. Repeated characters (e.g. aaaaa, zzzzz)
+  if (/(.)\1{4,}/.test(lp)) {
+    return true;
+  }
+
+  return false;
 }
 
 /**
@@ -74,7 +110,7 @@ export function formatCompanyNameFromDomain(domain: string): string {
 
 /**
  * Validates whether an email belongs to a corporate/company domain
- * and not a free consumer email domain.
+ * and not a free consumer email domain or fake user.
  */
 export function validateCorporateEmail(email: string): DomainValidationResult {
   const trimmed = email.trim().toLowerCase();
@@ -99,7 +135,18 @@ export function validateCorporateEmail(email: string): DomainValidationResult {
     };
   }
 
-  const domain = extractDomain(trimmed);
+  const [localPart, domain] = trimmed.split('@');
+
+  // Check if username is a fake / test / random user
+  if (isLikelyFakeUsername(localPart)) {
+    return {
+      isValid: false,
+      isFreeDomain: false,
+      isFakeUser: true,
+      domain,
+      error: 'Invalid: Mailbox does not exist on this server (Fake user).',
+    };
+  }
 
   // Check if domain is in the list of free consumer providers
   if (FREE_EMAIL_DOMAINS.has(domain)) {
@@ -125,6 +172,275 @@ export function validateCorporateEmail(email: string): DomainValidationResult {
     domain,
     companyName,
   };
+}
+
+export interface MxCheckResult {
+  hasMx: boolean;
+  mxRecords: string[];
+  isGoogleWorkspace: boolean;
+  isMicrosoft365: boolean;
+  provider: 'google' | 'microsoft' | 'custom' | 'none';
+  status: 'OK' | 'NOT_FOUND' | 'ERROR';
+  suggestedDomain?: string;
+  note?: string;
+}
+
+/**
+ * Common domain typo detector
+ */
+export function detectDomainTypo(domain: string): string | null {
+  const d = domain.toLowerCase().trim();
+  if (d.endsWith('.cm') && !d.endsWith('.com.cm')) {
+    return d.replace(/\.cm$/, '.com');
+  }
+  if (d.endsWith('.cmo')) {
+    return d.replace(/\.cmo$/, '.com');
+  }
+  if (d === 'gmal.com' || d === 'gmaill.com' || d === 'gmial.com') {
+    return 'gmail.com';
+  }
+  if (d === 'yaho.com' || d === 'yahooo.com') {
+    return 'yahoo.com';
+  }
+  if (d === 'hotmial.com' || d === 'hotmai.com') {
+    return 'hotmail.com';
+  }
+  if (d === 'outlok.com' || d === 'outloo.com') {
+    return 'outlook.com';
+  }
+  return null;
+}
+
+/**
+ * Common local part typo detector (e.g. saless -> sales)
+ */
+export function detectLocalPartTypo(email: string): string | null {
+  const [localPart] = email.split('@');
+  if (!localPart) return null;
+  const l = localPart.toLowerCase();
+  if (l === 'saless') return 'sales';
+  if (l === 'supportt') return 'support';
+  if (l === 'adminn') return 'admin';
+  if (l === 'infoo') return 'info';
+  if (l === 'contactt') return 'contact';
+  return null;
+}
+
+export interface AbstractValidationResult {
+  deliverable: boolean;
+  statusDetail: string;
+  isFormatValid: boolean;
+  isSmtpValid: boolean;
+  isMxValid: boolean;
+  isFreeEmail: boolean;
+  organizationName?: string;
+  mxRecords?: string[];
+  qualityScore?: number;
+}
+
+/**
+ * Validates email deliverability via AbstractAPI Email Reputation endpoint
+ */
+export async function validateEmailWithAbstractApi(email: string): Promise<AbstractValidationResult | null> {
+  try {
+    const res = await fetch(`/api/validate-email?email=${encodeURIComponent(email)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.error) return null;
+
+    const del = data.email_deliverability;
+    const qual = data.email_quality;
+    const sender = data.email_sender;
+
+    return {
+      deliverable: del?.status === 'deliverable',
+      statusDetail: del?.status_detail || '',
+      isFormatValid: del?.is_format_valid ?? true,
+      isSmtpValid: del?.is_smtp_valid ?? true,
+      isMxValid: del?.is_mx_valid ?? true,
+      isFreeEmail: qual?.is_free_email ?? false,
+      organizationName: sender?.organization_name,
+      mxRecords: del?.mx_records,
+      qualityScore: qual?.score,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export interface SmtpPingResult {
+  valid: boolean;
+  message?: string;
+  reason?: string;
+  mailServer?: string;
+}
+
+/**
+ * Pings the target mail server on port 25 to check if mailbox exists
+ */
+export async function pingMailboxSmtp(email: string): Promise<SmtpPingResult | null> {
+  try {
+    const res = await fetch(`/api/check-mailbox?email=${encodeURIComponent(email)}`);
+    if (res.ok) {
+      return await res.json();
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Performs real-time DNS MX lookup to check if domain exists and whether it uses Google Workspace
+ */
+export async function checkDomainMxLive(domain: string, email?: string): Promise<MxCheckResult> {
+  const cleanDomain = domain.toLowerCase().trim();
+  if (!cleanDomain) {
+    return {
+      hasMx: false,
+      mxRecords: [],
+      isGoogleWorkspace: false,
+      isMicrosoft365: false,
+      provider: 'none',
+      status: 'NOT_FOUND',
+    };
+  }
+
+  // Optional: Check AbstractAPI if email is provided
+  if (email && email.includes('@')) {
+    try {
+      const abstractData = await validateEmailWithAbstractApi(email);
+      if (abstractData && abstractData.mxRecords && abstractData.mxRecords.length > 0) {
+        const mxList = abstractData.mxRecords.map((m) => m.toLowerCase());
+        const isGoogle = mxList.some((mx) =>
+          mx.includes('google.com') || mx.includes('googlemail.com') || mx.includes('aspmx')
+        );
+        const isMs = mxList.some((mx) =>
+          mx.includes('outlook.com') || mx.includes('microsoft')
+        );
+
+        return {
+          hasMx: true,
+          mxRecords: mxList,
+          isGoogleWorkspace: isGoogle,
+          isMicrosoft365: isMs,
+          provider: isGoogle ? 'google' : isMs ? 'microsoft' : 'custom',
+          status: 'OK',
+          note: isGoogle
+            ? 'Google Workspace MX confirmed (AbstractAPI)'
+            : isMs
+            ? 'Microsoft 365 MX confirmed (AbstractAPI)'
+            : `Mail server: ${mxList[0]} (AbstractAPI Deliverable)`,
+        };
+      } else if (abstractData && !abstractData.deliverable && abstractData.statusDetail === 'dns_record_not_found') {
+        const typo = detectDomainTypo(cleanDomain);
+        return {
+          hasMx: false,
+          mxRecords: [],
+          isGoogleWorkspace: false,
+          isMicrosoft365: false,
+          provider: 'none',
+          status: 'NOT_FOUND',
+          suggestedDomain: typo || undefined,
+        };
+      }
+    } catch {
+      // fallback to internal DNS check
+    }
+  }
+
+  // 1. Try local Vite dev server API first
+  try {
+    const res = await fetch(`/api/verify-domain?domain=${encodeURIComponent(cleanDomain)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.status === 'OK' && data.hasMx) {
+        const mxList: string[] = data.mxRecords || [];
+        const isGoogle = Boolean(data.isGoogleWorkspace);
+        const isMs = Boolean(data.isMicrosoft365);
+        return {
+          hasMx: true,
+          mxRecords: mxList,
+          isGoogleWorkspace: isGoogle,
+          isMicrosoft365: isMs,
+          provider: isGoogle ? 'google' : isMs ? 'microsoft' : 'custom',
+          status: 'OK',
+          note: isGoogle
+            ? 'Google Workspace MX confirmed'
+            : isMs
+            ? 'Microsoft 365 MX confirmed'
+            : `Custom mail server: ${mxList[0] || 'active'}`,
+        };
+      } else if (data.status === 'NOT_FOUND') {
+        const typo = detectDomainTypo(cleanDomain);
+        return {
+          hasMx: false,
+          mxRecords: [],
+          isGoogleWorkspace: false,
+          isMicrosoft365: false,
+          provider: 'none',
+          status: 'NOT_FOUND',
+          suggestedDomain: typo || undefined,
+        };
+      }
+    }
+  } catch {
+    // Fallback to Cloudflare DoH
+  }
+
+  // 2. Fallback to Cloudflare DNS-over-HTTPS (CORS enabled public DNS)
+  try {
+    const res = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(cleanDomain)}&type=MX`, {
+      headers: { accept: 'application/dns-json' },
+    });
+    const data = await res.json();
+    if (data.Status !== 0 || !data.Answer || data.Answer.length === 0) {
+      const typo = detectDomainTypo(cleanDomain);
+      return {
+        hasMx: false,
+        mxRecords: [],
+        isGoogleWorkspace: false,
+        isMicrosoft365: false,
+        provider: 'none',
+        status: 'NOT_FOUND',
+        suggestedDomain: typo || undefined,
+      };
+    }
+
+    const mxList: string[] = data.Answer.map((a: any) =>
+      String(a.data).split(' ').pop()?.replace(/\.$/, '').toLowerCase() || ''
+    ).filter(Boolean);
+
+    const isGoogle = mxList.some((mx) =>
+      mx.includes('google.com') || mx.includes('googlemail.com') || mx.includes('aspmx')
+    );
+    const isMs = mxList.some((mx) =>
+      mx.includes('outlook.com') || mx.includes('microsoft')
+    );
+
+    return {
+      hasMx: true,
+      mxRecords: mxList,
+      isGoogleWorkspace: isGoogle,
+      isMicrosoft365: isMs,
+      provider: isGoogle ? 'google' : isMs ? 'microsoft' : 'custom',
+      status: 'OK',
+      note: isGoogle
+        ? 'Google Workspace MX confirmed'
+        : isMs
+        ? 'Microsoft 365 MX confirmed'
+        : `Custom mail server: ${mxList[0] || 'active'}`,
+    };
+  } catch {
+    return {
+      hasMx: true,
+      mxRecords: [],
+      isGoogleWorkspace: false,
+      isMicrosoft365: false,
+      provider: 'custom',
+      status: 'OK',
+    };
+  }
 }
 
 /**
