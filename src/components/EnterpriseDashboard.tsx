@@ -56,47 +56,47 @@ export const EnterpriseDashboard: React.FC<EnterpriseDashboardProps> = ({ user, 
       )}
 
       {/* Top Corporate Nav */}
-      <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-20">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#0B63F6] text-white flex items-center justify-center font-bold text-lg shadow-sm">
+      <header className="bg-white border-b border-slate-200 px-4 py-3 sm:px-6 sm:py-4 flex items-center justify-between sticky top-0 z-20">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#0B63F6] text-white flex items-center justify-center font-bold text-base sm:text-lg shadow-sm shrink-0">
             {user.companyName.charAt(0)}
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-slate-900 text-base leading-tight">{user.companyName}</span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+              <span className="font-bold text-slate-900 text-sm sm:text-base leading-tight truncate">{user.companyName}</span>
+              <span className="hidden sm:inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
                 Verified Google Workspace
               </span>
             </div>
-            <p className="text-xs text-slate-500 font-mono">@{user.domain}</p>
+            <p className="text-[11px] sm:text-xs text-slate-500 font-mono truncate">@{user.domain}</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="hidden sm:flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-slate-100 text-xs text-slate-700">
+        <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+          <div className="hidden md:flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-slate-100 text-xs text-slate-700">
             <span className="w-2 h-2 rounded-full bg-emerald-500" />
             <span className="font-medium">{user.email}</span>
           </div>
           <button
             onClick={onLogout}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 text-xs font-semibold text-slate-700 transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 text-xs font-semibold text-slate-700 transition-colors cursor-pointer"
           >
             <LogOut className="w-3.5 h-3.5" />
-            Sign Out
+            <span className="hidden xs:inline">Sign Out</span>
           </button>
         </div>
       </header>
 
       {/* Main Container */}
-      <main className="flex-1 max-w-5xl w-full mx-auto p-6 sm:p-8 space-y-6">
+      <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 md:p-8 space-y-6">
         {/* Banner */}
-        <div className="rounded-2xl bg-gradient-to-r from-[#0B63F6] to-blue-700 text-white p-6 sm:p-8 shadow-md relative overflow-hidden">
+        <div className="rounded-2xl bg-gradient-to-r from-[#0B63F6] to-blue-700 text-white p-5 sm:p-8 shadow-md relative overflow-hidden">
           <div className="relative z-10 max-w-2xl">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 text-xs font-medium backdrop-blur-sm mb-3">
               <ShieldCheck className="w-3.5 h-3.5 text-blue-200" />
               Corporate Identity Authorized
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight">
               Welcome to {user.companyName} Workspace
             </h1>
             <p className="mt-2 text-blue-100 text-sm leading-relaxed">

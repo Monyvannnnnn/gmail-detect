@@ -312,19 +312,25 @@ export const AuthCard: React.FC<AuthCardProps> = ({ onSuccess, registeredUsers }
   }
 
   return (
-    <div className="w-full h-full bg-[#0B63F6] text-white flex flex-col justify-between p-7 sm:p-10 lg:p-12 relative overflow-hidden">
+    <div className="w-full h-full bg-[#0B63F6] text-white flex flex-col justify-between p-6 sm:p-9 lg:p-12 relative overflow-hidden">
       {/* Subtle decorative radial glow */}
       <div className="absolute top-0 right-0 w-80 h-80 bg-blue-400/20 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-0 left-0 w-72 h-72 bg-blue-700/40 rounded-full blur-2xl pointer-events-none" />
 
       {/* Main Content Area */}
       <div className="relative z-10 w-full max-w-md mx-auto my-auto">
+        {/* Mobile-only Enterprise Badge */}
+        <div className="lg:hidden inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 text-[11px] font-semibold text-blue-100 backdrop-blur-sm mb-3.5 border border-white/20">
+          <ShieldCheck className="w-3.5 h-3.5 text-blue-200" />
+          <span>Google Workspace SSO Protected</span>
+        </div>
+
         {/* Title Header */}
-        <div className="mb-7">
-          <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-white mb-2 font-['Plus_Jakarta_Sans']">
+        <div className="mb-5 sm:mb-7">
+          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-white mb-2 font-['Plus_Jakarta_Sans']">
             {mode === 'signup' ? 'Welcome!' : 'Welcome back!'}
           </h1>
-          <p className="text-blue-100/90 text-sm font-normal">
+          <p className="text-blue-100/90 text-xs sm:text-sm font-normal">
             {mode === 'signup'
               ? 'Create your enterprise account with company Google Workspace.'
               : 'Sign in to access your company dashboard.'}
@@ -333,14 +339,14 @@ export const AuthCard: React.FC<AuthCardProps> = ({ onSuccess, registeredUsers }
 
         {/* Global Error Banner */}
         {errorMessage && (
-          <div className="mb-5 p-3 rounded-2xl bg-rose-500/20 border border-rose-400/30 text-rose-100 text-xs flex items-start gap-2.5 animate-fadeIn">
+          <div className="mb-4 sm:mb-5 p-3 rounded-2xl bg-rose-500/20 border border-rose-400/30 text-rose-100 text-xs flex items-start gap-2.5 animate-fadeIn">
             <AlertCircle className="w-4 h-4 text-rose-300 shrink-0 mt-0.5" />
             <div className="leading-snug">{errorMessage}</div>
           </div>
         )}
 
         {/* Form Inputs matching the screenshot UI */}
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4">
           {/* 1. Name Input (Sign Up Mode only) */}
           {mode === 'signup' && (
             <div className="relative">

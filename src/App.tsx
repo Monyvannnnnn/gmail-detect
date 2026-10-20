@@ -76,16 +76,16 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F0F5FF] text-slate-800 flex items-center justify-center p-4 sm:p-6 md:p-8 lg:p-10 font-['Plus_Jakarta_Sans'] antialiased">
+    <div className="min-h-screen bg-[#F0F5FF] text-slate-800 flex items-center justify-center p-3 sm:p-6 md:p-8 lg:p-10 font-['Plus_Jakarta_Sans'] antialiased">
       {/* Main Center Split Container */}
-      <main className="w-full max-w-5xl bg-white rounded-3xl shadow-2xl shadow-blue-900/10 border border-blue-100/60 overflow-hidden grid grid-cols-1 lg:grid-cols-2 min-h-[580px] lg:min-h-[640px]">
-        {/* Left Column: Security Vector Illustration matching the provided UI */}
-        <div className="bg-[#FFFFFF] flex flex-col justify-center items-center border-b lg:border-b-0 lg:border-r border-slate-100">
+      <main className="w-full max-w-md lg:max-w-5xl bg-white rounded-2xl sm:rounded-3xl shadow-2xl shadow-blue-900/10 border border-blue-100/60 overflow-hidden grid grid-cols-1 lg:grid-cols-2 min-h-0 lg:min-h-[640px]">
+        {/* Left Column: Security Vector Illustration (Desktop / Large Tablet only) */}
+        <div className="hidden lg:flex bg-[#FFFFFF] flex-col justify-center items-center border-r border-slate-100">
           <IllustrationLeft />
         </div>
 
-        {/* Right Column: Royal Blue Auth Form matching the provided UI */}
-        <div className="flex flex-col">
+        {/* Right Column: Royal Blue Auth Form */}
+        <div className="flex flex-col w-full">
           <AuthCard
             onSuccess={handleAuthSuccess}
             registeredUsers={registeredUsers}
