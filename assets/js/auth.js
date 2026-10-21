@@ -209,11 +209,8 @@ document.addEventListener('DOMContentLoaded', function () {
             const msg = isGmail ? 'Free @gmail.com is not allowed!' : `Free @${domain} is not allowed!`;
             emailFeedbackContainer.innerHTML = `
                 <div class="feedback-box feedback-danger">
-                    <div class="d-flex align-items-center gap-2">
-                        <i class="bi bi-exclamation-circle-fill text-danger fs-6"></i>
-                        <span class="fw-bold">${msg}</span>
-                    </div>
-                    <span class="feedback-pill-badge bg-danger bg-opacity-25 text-danger border border-danger">Not Allowed</span>
+                    <i class="bi bi-exclamation-circle-fill text-danger fs-6"></i>
+                    <span>${msg}</span>
                 </div>
             `;
             emailStatusIcon.innerHTML = '<i class="bi bi-exclamation-circle-fill text-danger"></i>';
@@ -227,11 +224,8 @@ document.addEventListener('DOMContentLoaded', function () {
         if (isDomainBlocked(domain)) {
             emailFeedbackContainer.innerHTML = `
                 <div class="feedback-box feedback-danger">
-                    <div class="d-flex align-items-center gap-2">
-                        <i class="bi bi-exclamation-circle-fill text-danger fs-6"></i>
-                        <span class="fw-bold">@${domain} is not allowed!</span>
-                    </div>
-                    <span class="feedback-pill-badge bg-danger bg-opacity-25 text-danger border border-danger">Not Allowed</span>
+                    <i class="bi bi-exclamation-circle-fill text-danger fs-6"></i>
+                    <span>@${domain} is not allowed!</span>
                 </div>
             `;
             emailStatusIcon.innerHTML = '<i class="bi bi-exclamation-circle-fill text-danger"></i>';
@@ -245,11 +239,8 @@ document.addEventListener('DOMContentLoaded', function () {
         if (isLikelyFake(localPart)) {
             emailFeedbackContainer.innerHTML = `
                 <div class="feedback-box feedback-danger">
-                    <div class="d-flex align-items-center gap-2">
-                        <i class="bi bi-exclamation-circle-fill text-danger fs-6"></i>
-                        <span class="fw-bold">Invalid: Mailbox does not exist on this server (Fake user).</span>
-                    </div>
-                    <span class="feedback-pill-badge bg-danger bg-opacity-25 text-danger border border-danger">Invalid</span>
+                    <i class="bi bi-exclamation-circle-fill text-danger fs-6"></i>
+                    <span>Invalid: Mailbox does not exist on this server (Fake user).</span>
                 </div>
             `;
             emailStatusIcon.innerHTML = '<i class="bi bi-exclamation-circle-fill text-danger"></i>';
@@ -271,10 +262,8 @@ document.addEventListener('DOMContentLoaded', function () {
         clearTimeout(mailboxCheckTimer);
         emailFeedbackContainer.innerHTML = `
             <div class="feedback-box feedback-checking">
-                <div class="d-flex align-items-center gap-2">
-                    <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
-                    <span class="fw-medium">Verifying corporate domain...</span>
-                </div>
+                <div class="spinner-border spinner-border-sm text-info" role="status" style="width: 0.95rem; height: 0.95rem; border-width: 0.15em;"></div>
+                <span>Verifying corporate domain...</span>
             </div>
         `;
         emailStatusIcon.innerHTML = '<div class="spinner-border spinner-border-sm text-primary" role="status"></div>';
@@ -291,13 +280,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 if (data.valid) {
                     mailboxValidState = true;
+                    const successMsg = data.message || 'Valid: Mailbox exists and is active!';
                     emailFeedbackContainer.innerHTML = `
                         <div class="feedback-box feedback-success">
-                            <div class="d-flex align-items-center gap-2">
-                                <i class="bi bi-check-circle-fill text-success fs-6"></i>
-                                <span class="fw-bold">Valid: Corporate domain verified!</span>
-                            </div>
-                            <span class="feedback-pill-badge bg-success bg-opacity-25 text-success border border-success">Valid</span>
+                            <i class="bi bi-check-circle-fill text-success fs-6"></i>
+                            <span>${successMsg}</span>
                         </div>
                     `;
                     emailStatusIcon.innerHTML = '<i class="bi bi-check-circle-fill text-success"></i>';
@@ -308,11 +295,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     const reason = data.message || data.reason || 'Invalid: Mailbox does not exist on this server.';
                     emailFeedbackContainer.innerHTML = `
                         <div class="feedback-box feedback-danger">
-                            <div class="d-flex align-items-center gap-2">
-                                <i class="bi bi-exclamation-circle-fill text-danger fs-6"></i>
-                                <span class="fw-bold">${reason}</span>
-                            </div>
-                            <span class="feedback-pill-badge bg-danger bg-opacity-25 text-danger border border-danger">Invalid</span>
+                            <i class="bi bi-exclamation-circle-fill text-danger fs-6"></i>
+                            <span>${reason}</span>
                         </div>
                     `;
                     emailStatusIcon.innerHTML = '<i class="bi bi-exclamation-circle-fill text-danger"></i>';

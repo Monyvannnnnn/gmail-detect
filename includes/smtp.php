@@ -101,7 +101,7 @@ function checkMailboxExists(string $email): array {
 
     return [
         'valid' => true,
-        'message' => 'Valid: Corporate domain verified with active mail servers!',
+        'message' => 'Valid: Mailbox exists and is active!',
         'domain' => $domain,
         'mailServer' => $mailServer,
         'mxRecords' => $mxRecords,
